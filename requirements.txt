@@ -1,0 +1,10 @@
+chainlit
+langchain_google_genai
+pandas
+openpyxl
+python-dotenv
+matplotlib
+plotly
+seaborn
+numpy
+scikit-learn
