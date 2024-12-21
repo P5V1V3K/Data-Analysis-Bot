@@ -1,5 +1,9 @@
 # Data-Analysis-Bot
-## Run 
+## Chainlit 
 ```
-chainlit run app.py -w
+chainlit run chainlit_app.py -w
+```
+## Streamlit
+```
+streamlit run streamlit_app.py
 ```
