@@ -78,6 +78,16 @@ def filter_rows(text):
     filtered_text = '\n'.join(filtered_lines)
     return filtered_text
 
+def adjust_figure_size(fig):
+    """Adjust the size and layout of Plotly figures."""
+    fig.update_layout(
+        width=1000,  # Set desired width
+        height=600,  # Set desired height
+        font=dict(size=16),  # Increase font size for better readability
+        margin=dict(l=50, r=50, t=50, b=50),  # Adjust margins
+    )
+    return fig
+
 def interpret_code(gpt_response, user_df):
     if "```" in gpt_response:
         just_code = extract_code(gpt_response)
@@ -111,7 +121,9 @@ def interpret_code(gpt_response, user_df):
             modified_df = None
         
         # Collect all figures created in the local scope
-        figures = [value for key, value in local_scope.items() if isinstance(value, go.Figure)]
+        figures = [
+            adjust_figure_size(value) for value in local_scope.values() if isinstance(value, go.Figure)
+        ]
         
         return modified_df, new_stdout.getvalue(), figures  # Return modified DataFrame, output, and list of figures
     

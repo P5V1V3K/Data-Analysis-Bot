@@ -52,6 +52,17 @@ def filter_rows(text):
     filtered_lines = [line for line in lines if "pd.read_csv" not in line and "pd.read_excel" not in line and ".show()" not in line]
     return '\n'.join(filtered_lines)
 
+def adjust_figure_size(fig):
+    """Adjust the size and layout of Plotly figures."""
+    fig.update_layout(
+        width=1000,  # Set desired width
+        height=600,  # Set desired height
+        font=dict(size=16),  # Increase font size for better readability
+        margin=dict(l=50, r=50, t=50, b=50),  # Adjust margins
+    )
+    return fig
+
+
 def interpret_code(gpt_response, user_df):
     """Interpret and execute the code from GPT response."""
     if "```" in gpt_response:
@@ -81,7 +92,9 @@ def interpret_code(gpt_response, user_df):
         
         # Check if 'df' is in the local scope and return the modified DataFrame
         modified_df = local_scope.get('df')
-        figures = [value for value in local_scope.values() if isinstance(value, go.Figure)]
+        figures = [
+            adjust_figure_size(value) for value in local_scope.values() if isinstance(value, go.Figure)
+        ]
         return modified_df, new_stdout.getvalue(), figures
 
     return None, "", []
@@ -144,7 +157,7 @@ if uploaded_file:
                 if figures:
                     st.markdown("### Visualizations")
                     for fig in figures:
-                        st.plotly_chart(fig)
+                        st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.error("Error while executing code: " + str(e))
 
