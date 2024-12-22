@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 import asyncio
 import uuid  # Import UUID for unique session IDs
 
+
 # Load environment variables
 load_dotenv()
 
@@ -161,11 +162,7 @@ async def main(message: str):
 
     # Simulate typing effect for the response
     await loading_message.remove()  # Remove loading message
-    msg = cl.Message(content="LLM Response\n")
-    for char in gpt_response:
-        await msg.stream_token(char)
-
-    await msg.send()
+    await cl.Message(content=f"LLM Response\n{gpt_response}").send()
     
 
     # Execute the code asynchronously
@@ -212,4 +209,6 @@ async def on_action(action):
     else:
         await cl.Message(content="No previous state to revert to.").send()
 
-    
+    await cl.Message(
+        content=f"DataFrame contains {cl.user_session.get('user_df').shape[0]} Rows and {cl.user_session.get('user_df').shape[1]} Columns where each column type are:\n [{get_dt_columns_info(cl.user_session.get('user_df'))}]"
+    ).send()
