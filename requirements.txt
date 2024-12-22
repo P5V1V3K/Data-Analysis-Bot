@@ -1,3 +1,4 @@
+pydantic==2.10.1
 chainlit
 langchain
 langchain_google_genai
