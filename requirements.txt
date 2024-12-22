@@ -9,4 +9,3 @@ plotly
 seaborn
 numpy
 scikit-learn
-streamlit
