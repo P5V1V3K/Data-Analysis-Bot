@@ -10,6 +10,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 import asyncio
 import uuid  # Import UUID for unique session IDs
+from langchain_core.prompts import ChatPromptTemplate
+
+
+
 
 
 # Load environment variables
@@ -22,7 +26,7 @@ Here are the requirements for your responses:
 3: The code should perform clear and complete data mining and machine learning tasks and, where appropriate, generate visualizations using Plotly. Return the figure objects for display.
 4: Provide brief explanations along with the code on how the tasks or visualizations are important, what they achieve, and the insights they provide.
 5: If the user asks for suggestions for tasks, just provide the possible analyses or model ideas without writing the code.
-6: Write the code as a single script. Do not write notebook-specific code.
+6: Write the code as a single script. Do not write notebook-specific code. Always write code for the given columns and with respect to their datatypes.
 7: For data mining and machine learning tasks, use sklearn, XGBoost or other suitable libraries for modeling, and clearly explain the evaluation metrics.
 """
 
@@ -71,7 +75,7 @@ async def start_chat():
 
     cl.user_session.set(
         "message_history",
-        [{"role": "system", "content": system_prompt}],
+        [("system", f"{system_prompt}")],
     )
 
 def extract_code(gpt_response):
@@ -147,12 +151,12 @@ async def main(message: str):
 
     # Add the user's message to the history
     message_history = cl.user_session.get("message_history", [])
-    if len(message_history)>1:
-        message_history.pop()
-    message_history.append({"role": "user", "content": message.content + f"\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}"})
-
+    # if len(message_history)>1:
+    #     message_history.pop()
+    message_history.append(("human", "{input}"+f"\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}"))
+    chain = ChatPromptTemplate.from_messages(message_history)|llm
     # Asynchronously get response from the LLM model
-    response = await asyncio.to_thread(llm.invoke, message_history)
+    response = await asyncio.to_thread(chain.invoke,{"input":message.content})
     gpt_response = response.content
     
 
