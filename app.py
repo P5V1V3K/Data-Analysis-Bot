@@ -22,14 +22,14 @@ Here are the requirements for your responses:
 3: The code should perform clear and complete data mining and machine learning tasks and, where appropriate, generate visualizations using Plotly. Return the figure objects for display.
 4: Provide brief explanations along with the code on how the tasks or visualizations are important, what they achieve, and the insights they provide.
 5: If the user asks for suggestions for tasks, just provide the possible analyses or model ideas without writing the code.
-6: Write the code as a single script. Do not write notebook-specific code.
-7: For data mining and machine learning tasks, use sklearn or other suitable libraries for modeling, and clearly explain the evaluation metrics.
+6: Write the code as a single script. Do not write notebook-specific code. Always write code for the given columns and with respect to their datatypes.
+7: For data mining and machine learning tasks, use sklearn, XGBoost or other suitable libraries for modeling, and clearly explain the evaluation metrics.
 """
 
 # Initialize the Google Gemini model
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-flash",
-    temperature=0.2,
+    temperature=0.3,
 )
 
 def get_dt_columns_info(df):
@@ -88,10 +88,6 @@ def filter_rows(text):
     filtered_text = '\n'.join(filtered_lines)
     return filtered_text
 
-def adjust_figure_size(fig):
-    """Adjust the size and layout of Plotly figures."""
-    
-    return fig
 
 import asyncio
 
@@ -104,7 +100,7 @@ async def interpret_code_async(gpt_response, user_df):
             just_code = just_code[len("python"):]
 
         just_code = filter_rows(just_code)
-        print("CODE part:{}".format(just_code))
+        
 
         local_scope = {'df': user_df, 'go': go, 'px': px}  # Include Plotly Graph Objects
 
@@ -130,7 +126,7 @@ async def interpret_code_async(gpt_response, user_df):
 
         # Collect all figures created in the local scope
         figures = [
-            adjust_figure_size(value) for value in local_scope.values() if isinstance(value, go.Figure) 
+            (value) for value in local_scope.values() if isinstance(value, go.Figure) 
         ]
 
         return modified_df, new_stdout.getvalue(), figures  # Return modified DataFrame, output, and list of figures
@@ -158,11 +154,11 @@ async def main(message: str):
     # Asynchronously get response from the LLM model
     response = await asyncio.to_thread(llm.invoke, message_history)
     gpt_response = response.content
-    print("Gemini response:{}".format(gpt_response))
+    
 
     # Simulate typing effect for the response
     await loading_message.remove()  # Remove loading message
-    await cl.Message(content=f"LLM Response\n{gpt_response}").send()
+    await cl.Message(content=f"LLM Response:\n{gpt_response}").send()
     
 
     # Execute the code asynchronously
@@ -179,13 +175,13 @@ async def main(message: str):
 
     # Handle multiple figures
     if figures:
-        await cl.Message(content="Visualizations").send()
+        await cl.Message(content="Visualizations:").send()
         for i, figure in enumerate(figures):
-            elements = [cl.Plotly(name=f"chart_{i}", figure=figure, display="inline", size="large", width=1000, height=600)]
-            await cl.Message(content=f"Here is the generated plot {i + 1}:", elements=elements).send()
+            elements = [cl.Plotly(name=f"Plot {i+1}", figure=figure, display="page")]
+            await cl.Message(content=f"Here is the generated Plot {i+1}:", elements=elements).send()
 
     if output:
-        await cl.Message(content="Execution Output").send()
+        await cl.Message(content="Execution Output:").send()
         await cl.Message(content=output).send()
 
     # Define an action button
