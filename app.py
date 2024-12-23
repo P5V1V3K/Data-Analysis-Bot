@@ -15,8 +15,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-
-
+from langchain_core.messages import AIMessage
+from langchain_core.messages import RemoveMessage
 
 # Load environment variables
 load_dotenv()
@@ -30,6 +30,7 @@ Here are the requirements for your responses:
 5: If the user asks for suggestions for tasks, just provide the possible analyses or model ideas without writing the code.
 6: Write the code as a single script. Do not write notebook-specific code. Always write code for the given columns and with respect to their datatypes.
 7: For data mining and machine learning tasks, use sklearn, XGBoost or other suitable libraries for modeling, and clearly explain the evaluation metrics.
+8: If you are not able to generate a response for the query, state your abilites and that you are not capable of performing such tasks.
 """
 
 # Initialize the Google Gemini model
@@ -184,11 +185,14 @@ async def main(message: str):
     # Invoke the LangGraph workflow
     output = app.invoke({"messages": input_messages},config)
     gpt_response = output["messages"][-1].content  # Get the last message from the output
-    
-
-    # Simulate typing effect for the response
     await loading_message.remove()  # Remove loading message
-    await cl.Message(content=f"Bot:\n{gpt_response}").send()
+    if(gpt_response==""):
+        messages = app.get_state(config).values["messages"]
+        app.update_state(config, {"messages": RemoveMessage(id=messages[-2:].id)})
+        await cl.Message(content=f"Bot:\nSorry, I am unable to perform this action at the moment.").send()
+   
+    else:
+        await cl.Message(content=f"Bot:\n{gpt_response}").send()
     
 
     # Execute the code asynchronously
