@@ -11,8 +11,10 @@ from dotenv import load_dotenv
 import asyncio
 import uuid  # Import UUID for unique session IDs
 from langchain_core.prompts import ChatPromptTemplate
-
-
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import START, MessagesState, StateGraph
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 
 
 
@@ -44,39 +46,7 @@ def get_dt_columns_info(df):
         infos += "{}({}),\n".format(column_name, column_type)
     return infos[:-1]
 
-@cl.on_chat_start
-async def start_chat():
-    files = None
-    while files is None:
-        files = await cl.AskFileMessage(
-            content="Please upload your CSV/XLSX dataset file to begin!", 
-            accept=["csv", "xlsx"], 
-            max_size_mb=100
-        ).send()
-    
-    file = files[0]
-    
-    if "csv" in file.path:
-        df = pd.read_csv(file.path)
-    else:
-        df = pd.read_excel(file.path, index_col=0)    
-    
-    session_id = str(uuid.uuid4())  # Generate a unique session ID
-    cl.user_session.set("session_id", session_id)
-    
-    # Initialize a stack to store DataFrame states
-    cl.user_session.set("df_stack", [df])  # Start with the initial DataFrame
-    
-    cl.user_session.set("user_df", df)
-    
-    await cl.Message(
-        content=f"`{file.name}` uploaded correctly!\n it contains {cl.user_session.get('user_df').shape[0]} Rows and {cl.user_session.get('user_df').shape[1]} Columns where each column type are:\n [{get_dt_columns_info(cl.user_session.get('user_df'))}]"
-    ).send()
 
-    cl.user_session.set(
-        "message_history",
-        [("system", f"{system_prompt}")],
-    )
 
 def extract_code(gpt_response):
     pattern = r"```(.*?)```"
@@ -93,7 +63,7 @@ def filter_rows(text):
     return filtered_text
 
 
-import asyncio
+
 
 async def interpret_code_async(gpt_response, user_df):
     """Asynchronously execute the code extracted from GPT response."""
@@ -137,6 +107,64 @@ async def interpret_code_async(gpt_response, user_df):
 
     return None, "", []  # Return None for DataFrame, empty output, and empty list for figures if no code block found
 
+
+# Define a new graph
+workflow = StateGraph(state_schema=MessagesState)
+
+# Define the function that calls the model
+def call_model(state: MessagesState):
+    response = llm.invoke(state["messages"])
+    return {"messages": response}
+
+# Define the (single) node in the graph
+workflow.add_edge(START, "model")
+workflow.add_node("model", call_model)
+
+# Add memory
+memory = MemorySaver()
+app = workflow.compile(checkpointer=memory)
+
+
+@cl.on_chat_start
+async def start_chat():
+    session_id = str(uuid.uuid4())  # Generate a unique session ID
+    cl.user_session.set("session_id", session_id)
+
+    input_messages = [SystemMessage(content=system_prompt),HumanMessage(content="Hi")]
+    config = {"configurable": {"thread_id": f"{cl.user_session.get('session_id')}"}}
+    # Invoke the LangGraph workflow
+    output=app.invoke({"messages": input_messages},config)
+    gpt_response = output["messages"][-1].content
+    
+    await cl.Message(content=f"Bot:\n{gpt_response}").send()
+    files = None
+    while files is None:
+        files = await cl.AskFileMessage(
+            content="Please upload your CSV/XLSX dataset file to begin!", 
+            accept=["csv", "xlsx"], 
+            max_size_mb=100
+        ).send()
+    
+    file = files[0]
+    
+    if "csv" in file.path:
+        df = pd.read_csv(file.path)
+    else:
+        df = pd.read_excel(file.path, index_col=0)    
+    
+   
+
+    # Initialize a stack to store DataFrame states
+    cl.user_session.set("df_stack", [df])  # Start with the initial DataFrame
+    
+    cl.user_session.set("user_df", df)
+    
+    await cl.Message(
+        content=f"`{file.name}` uploaded correctly!\n it contains {cl.user_session.get('user_df').shape[0]} Rows and {cl.user_session.get('user_df').shape[1]} Columns where each column type are:\n [{get_dt_columns_info(cl.user_session.get('user_df'))}]"
+    ).send()
+
+    
+
 @cl.on_message
 async def main(message: str):
     # Display a loading message
@@ -149,20 +177,18 @@ async def main(message: str):
         await cl.Message(content="Please upload your dataset first.").send()
         return
 
-    # Add the user's message to the history
-    message_history = cl.user_session.get("message_history", [])
-    # if len(message_history)>1:
-    #     message_history.pop()
-    message_history.append(("human", "{input}"+f"\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}"))
-    chain = ChatPromptTemplate.from_messages(message_history)|llm
-    # Asynchronously get response from the LLM model
-    response = await asyncio.to_thread(chain.invoke,{"input":message.content})
-    gpt_response = response.content
+   
+     # Prepare input messages for the LangGraph workflow
+    input_messages = [HumanMessage(content=f"{message.content}\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}")]
+    config = {"configurable": {"thread_id": f"{cl.user_session.get('session_id')}"}}
+    # Invoke the LangGraph workflow
+    output = app.invoke({"messages": input_messages},config)
+    gpt_response = output["messages"][-1].content  # Get the last message from the output
     
 
     # Simulate typing effect for the response
     await loading_message.remove()  # Remove loading message
-    await cl.Message(content=f"LLM Response:\n{gpt_response}").send()
+    await cl.Message(content=f"Bot:\n{gpt_response}").send()
     
 
     # Execute the code asynchronously
