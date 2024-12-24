@@ -3,20 +3,17 @@ import chainlit as cl
 import re
 import sys
 import io
-import os
 import plotly.graph_objects as go
 import plotly.express as px
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
-import asyncio
-import uuid  # Import UUID for unique session IDs
-from langchain_core.prompts import ChatPromptTemplate
+import uuid  
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
-from langchain_core.messages import AIMessage
 from langchain_core.messages import RemoveMessage
+
 
 # Load environment variables
 load_dotenv()
@@ -48,7 +45,6 @@ def get_dt_columns_info(df):
     return infos[:-1]
 
 
-
 def extract_code(gpt_response):
     pattern = r"```(.*?)```"
     matches = re.findall(pattern, gpt_response, re.DOTALL)
@@ -62,8 +58,6 @@ def filter_rows(text):
     filtered_lines = [line for line in lines if "pd.read_csv" not in line and "pd.read_excel" not in line and ".show()" not in line]
     filtered_text = '\n'.join(filtered_lines)
     return filtered_text
-
-
 
 
 async def interpret_code_async(gpt_response, user_df):
@@ -117,6 +111,7 @@ def call_model(state: MessagesState):
     response = llm.invoke(state["messages"])
     return {"messages": response}
 
+
 # Define the (single) node in the graph
 workflow.add_edge(START, "model")
 workflow.add_node("model", call_model)
@@ -130,14 +125,10 @@ app = workflow.compile(checkpointer=memory)
 async def start_chat():
     session_id = str(uuid.uuid4())  # Generate a unique session ID
     cl.user_session.set("session_id", session_id)
-
-    input_messages = [SystemMessage(content=system_prompt),HumanMessage(content="Hi")]
+    await cl.Message(content="Bot:\nHello!  I'm ready to assist you with your data analysis and machine learning tasks. Please provide the dataset and describe the tasks you'd like me to perform.  I can handle data cleaning, exploratory data analysis (EDA), feature engineering, model building (using libraries like scikit-learn and XGBoost), model evaluation, and visualization (using Plotly).  I'm looking forward to working with you.").send()
+    system_message = [SystemMessage(content=system_prompt)]
     config = {"configurable": {"thread_id": f"{cl.user_session.get('session_id')}"}}
-    # Invoke the LangGraph workflow
-    output=app.invoke({"messages": input_messages},config)
-    gpt_response = output["messages"][-1].content
-    
-    await cl.Message(content=f"Bot:\n{gpt_response}").send()
+    app.update_state(config,{"messages":system_message})
     files = None
     while files is None:
         files = await cl.AskFileMessage(
@@ -153,8 +144,6 @@ async def start_chat():
     else:
         df = pd.read_excel(file.path, index_col=0)    
     
-   
-
     # Initialize a stack to store DataFrame states
     cl.user_session.set("df_stack", [df])  # Start with the initial DataFrame
     
@@ -165,7 +154,6 @@ async def start_chat():
     ).send()
 
     
-
 @cl.on_message
 async def main(message: str):
     # Display a loading message
@@ -178,26 +166,24 @@ async def main(message: str):
         await cl.Message(content="Please upload your dataset first.").send()
         return
 
-   
-     # Prepare input messages for the LangGraph workflow
-    input_messages = [HumanMessage(content=f"{message.content}\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}")]
+    # Prepare input messages for the LangGraph workflow
+    input_message = [HumanMessage(content=f"{message.content}\nThe available fields in the dataset df and their types are:{get_dt_columns_info(cl.user_session.get('user_df'))}")]
     config = {"configurable": {"thread_id": f"{cl.user_session.get('session_id')}"}}
-    # Invoke the LangGraph workflow
-    output = app.invoke({"messages": input_messages},config)
-    gpt_response = output["messages"][-1].content  # Get the last message from the output
+    output = app.invoke({"messages": input_message},config)
+    response = output["messages"][-1].content  # Get the last message from the output
     await loading_message.remove()  # Remove loading message
-    if(gpt_response==""):
+    if(response==""):
         messages = app.get_state(config).values["messages"]
-        app.update_state(config, {"messages": RemoveMessage(id=messages[-2:].id)})
+        app.update_state(config, {"messages": [RemoveMessage(id=m.id) for m in messages[-2:]]})
         await cl.Message(content=f"Bot:\nSorry, I am unable to perform this action at the moment.").send()
    
     else:
-        await cl.Message(content=f"Bot:\n{gpt_response}").send()
+        await cl.Message(content=f"Bot:\n{response}").send()
     
 
     # Execute the code asynchronously
     try:
-        modified_df, output, figures = await interpret_code_async(gpt_response, user_df)
+        modified_df, output, figures = await interpret_code_async(response, user_df)
         if modified_df is not None and not modified_df.equals(user_df):
             cl.user_session.set("user_df", modified_df)
             cl.user_session.get("df_stack").append(modified_df)  # Push the new state onto the stack
@@ -217,6 +203,13 @@ async def main(message: str):
     if output:
         await cl.Message(content="Execution Output:").send()
         await cl.Message(content=output).send()
+
+
+    # Trimming Chat
+    messages = app.get_state(config).values["messages"]
+    if len(messages) > 5:
+        app.update_state(config, {"messages": [RemoveMessage(id=m.id) for m in messages[1:3]]})
+
 
     # Define an action button
     actions = [
