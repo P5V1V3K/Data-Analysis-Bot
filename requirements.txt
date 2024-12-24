@@ -12,3 +12,5 @@ numpy
 scikit-learn
 xgboost
 langgraph
+scipy
+imblearn
