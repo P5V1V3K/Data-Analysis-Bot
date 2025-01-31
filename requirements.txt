@@ -14,3 +14,4 @@ xgboost
 langgraph
 scipy
 imblearn
+langchain-groq

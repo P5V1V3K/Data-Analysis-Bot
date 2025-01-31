@@ -5,7 +5,6 @@ import sys
 import io
 import plotly.graph_objects as go
 import plotly.express as px
-from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 import uuid  
 from langgraph.checkpoint.memory import MemorySaver
@@ -13,6 +12,8 @@ from langgraph.graph import START, MessagesState, StateGraph
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from langchain_core.messages import RemoveMessage
+
+from langchain_groq import ChatGroq
 
 
 # Load environment variables
@@ -31,9 +32,8 @@ Here are the requirements for your responses:
 """
 
 # Initialize the Google Gemini model
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
-    temperature=0.3,
+llm=ChatGroq(
+    model="gemma2-9b-it",
 )
 
 def get_dt_columns_info(df):
@@ -217,6 +217,7 @@ async def main(message: str):
             name="Yes",
             value="revert_button",
             description="Revert DataFrame",
+            payload={}
         )
     ]
     await cl.Message(content="Revert DataFrame?", actions=actions).send()
